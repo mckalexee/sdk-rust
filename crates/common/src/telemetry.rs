@@ -148,11 +148,51 @@ pub struct OtelCollectorOptions {
     #[builder(default)]
     pub use_seconds_for_durations: bool,
     /// Overrides for histogram buckets. Units depend on the value of `use_seconds_for_durations`.
+    /// Must be empty unless `histogram_aggregation` is [`HistogramAggregation::ExplicitBuckets`].
     #[builder(default)]
     pub histogram_bucket_overrides: HistogramBucketOverrides,
     /// Protocol to use for communication with the collector
     #[builder(default = OtlpProtocol::Grpc)]
     pub protocol: OtlpProtocol,
+    /// How histogram metrics are aggregated. Defaults to explicit buckets.
+    #[builder(default)]
+    pub histogram_aggregation: HistogramAggregation,
+}
+
+/// Selects how the OTLP exporter aggregates histogram metrics.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub enum HistogramAggregation {
+    /// Fixed bucket boundaries: Core's defaults per metric, or `histogram_bucket_overrides`.
+    #[default]
+    ExplicitBuckets,
+    /// OpenTelemetry base-2 exponential histograms, which Prometheus-compatible backends store as
+    /// native histograms. Applies to every histogram, including custom ones created through the
+    /// SDK's metric meter. `histogram_bucket_overrides` must be empty in this mode.
+    Base2Exponential(Base2ExponentialHistogramOptions),
+}
+
+/// Options for [`HistogramAggregation::Base2Exponential`].
+#[derive(Debug, Clone, bon::Builder)]
+#[non_exhaustive]
+pub struct Base2ExponentialHistogramOptions {
+    /// Maximum number of buckets in each of the positive and negative ranges. Defaults to 160.
+    #[builder(default = 160)]
+    pub max_size: u32,
+    /// Maximum resolution scale, from -10 to 20. Defaults to 20. Prometheus reduces any scale
+    /// above 8 on ingest.
+    #[builder(default = 20)]
+    pub max_scale: i8,
+    /// Appended to the name of every histogram, so the exponential series never shares a name
+    /// with the fixed-bucket series it replaces. Defaults to `_native`. Must not be empty.
+    #[builder(into, default = "_native".to_string())]
+    pub name_suffix: String,
+}
+
+impl Default for Base2ExponentialHistogramOptions {
+    fn default() -> Self {
+        Base2ExponentialHistogramOptions::builder().build()
+    }
 }
 
 /// Options for exporting metrics to Prometheus

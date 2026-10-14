@@ -56,6 +56,12 @@ relevant information.
 ### Added
 * `Worker::run_until` consumes a worker and runs it until a supplied future completes, then shuts
   it down and releases its worker registration before returning, including when running fails.
+* `OtelCollectorOptions::histogram_aggregation` selects how the OTLP exporter aggregates histograms.
+  `HistogramAggregation::Base2Exponential` exports every histogram, including custom ones, as an
+  OpenTelemetry exponential histogram, which Prometheus-compatible backends store as a native
+  histogram. Each series carries `Base2ExponentialHistogramOptions::name_suffix` (`_native` by
+  default) so it never shares a name with the fixed-bucket series it replaces, and
+  `histogram_bucket_overrides` is rejected in this mode. Explicit buckets remain the default.
 
 ## [1.1.0] - 2026-10-06
 

@@ -20,8 +20,9 @@ use temporalio_common::{
         Runtime as CoreEnvironmentRuntime, runtime::RuntimeType as CoreRuntimeType,
     },
     telemetry::{
-        CoreLog, CoreLogConsumer, HistogramBucketOverrides, Logger, MetricTemporality,
-        OtelCollectorOptions, PrometheusExporterOptions, TelemetryOptions as CoreTelemetryOptions,
+        Base2ExponentialHistogramOptions, CoreLog, CoreLogConsumer, HistogramAggregation,
+        HistogramBucketOverrides, Logger, MetricTemporality, OtelCollectorOptions,
+        PrometheusExporterOptions, TelemetryOptions as CoreTelemetryOptions,
         build_otlp_metric_exporter, metrics::CoreMeter, start_prometheus_metric_exporter,
     },
 };
@@ -186,12 +187,28 @@ pub struct OpenTelemetryOptions {
     /// Histogram bucket overrides in form of
     /// `<metric1>\n<float>,<float>,<float>\n<metric2>\n<float>,<float>,<float>`
     pub histogram_bucket_overrides: NewlineDelimitedMapRef,
+    /// The zero value selects explicit buckets, which is the default.
+    pub histogram_aggregation: OpenTelemetryHistogramAggregation,
+    /// Only used with `Base2Exponential`. 0 means the default of 160.
+    pub exponential_histogram_max_size: u32,
+    /// Only used with `Base2Exponential` when `exponential_histogram_max_scale_set` is true.
+    /// Otherwise, the default of 20 applies.
+    pub exponential_histogram_max_scale: i8,
+    pub exponential_histogram_max_scale_set: bool,
+    /// Only used with `Base2Exponential`. Empty means the default of `_native`.
+    pub exponential_histogram_name_suffix: ByteArrayRef,
 }
 
 #[repr(C)]
 pub enum OpenTelemetryMetricTemporality {
     Cumulative = 1,
     Delta,
+}
+
+#[repr(C)]
+pub enum OpenTelemetryHistogramAggregation {
+    ExplicitBuckets = 0,
+    Base2Exponential,
 }
 
 #[repr(C)]
@@ -498,6 +515,31 @@ fn create_meter(
                     overrides: parse_histogram_bucket_overrides(
                         &otel_options.histogram_bucket_overrides,
                     )?,
+                })
+                .histogram_aggregation(match otel_options.histogram_aggregation {
+                    OpenTelemetryHistogramAggregation::ExplicitBuckets => {
+                        HistogramAggregation::ExplicitBuckets
+                    }
+                    OpenTelemetryHistogramAggregation::Base2Exponential => {
+                        HistogramAggregation::Base2Exponential(
+                            Base2ExponentialHistogramOptions::builder()
+                                .maybe_max_size(
+                                    (otel_options.exponential_histogram_max_size > 0)
+                                        .then_some(otel_options.exponential_histogram_max_size),
+                                )
+                                .maybe_max_scale(
+                                    otel_options
+                                        .exponential_histogram_max_scale_set
+                                        .then_some(otel_options.exponential_histogram_max_scale),
+                                )
+                                .maybe_name_suffix(
+                                    otel_options
+                                        .exponential_histogram_name_suffix
+                                        .to_option_str(),
+                                )
+                                .build(),
+                        )
+                    }
                 })
                 .maybe_metric_periodicity(
                     (otel_options.metric_periodicity_millis > 0).then(|| {
