@@ -58,56 +58,44 @@ fn histo_view(
 }
 
 pub(super) fn augment_meter_provider_with_defaults(
-    mpb: MeterProviderBuilder,
+    mut mpb: MeterProviderBuilder,
     global_tags: &HashMap<String, String>,
     use_seconds: bool,
     bucket_overrides: HistogramBucketOverrides,
     histogram_aggregation: HistogramAggregation,
 ) -> Result<MeterProviderBuilder, anyhow::Error> {
-    let mpb = match histogram_aggregation {
-        HistogramAggregation::ExplicitBuckets => {
-            explicit_bucket_views(mpb, use_seconds, bucket_overrides)
+    if let HistogramAggregation::Base2Exponential(opts) = histogram_aggregation {
+        if !bucket_overrides.overrides.is_empty() {
+            bail!("histogram_bucket_overrides cannot be combined with exponential histograms");
         }
-        HistogramAggregation::Base2Exponential(opts) => {
-            if !bucket_overrides.overrides.is_empty() {
-                bail!("histogram_bucket_overrides cannot be combined with exponential histograms");
-            }
-            if opts.name_suffix.is_empty() {
-                bail!("exponential histogram name_suffix must not be empty");
-            }
-            let aggregation = Aggregation::Base2ExponentialHistogram {
-                max_size: opts.max_size,
-                max_scale: opts.max_scale,
-                record_min_max: true,
-            };
-            // The view closure can only panic on a bad aggregation, so validate it once here.
-            metrics::Stream::builder()
-                .with_aggregation(aggregation.clone())
-                .build()
-                .map_err(|e| anyhow!("invalid exponential histogram options: {e}"))?;
-            mpb.with_view(move |ins: &Instrument| {
-                if ins.kind() == InstrumentKind::Histogram {
-                    Some(
-                        metrics::Stream::builder()
-                            .with_name(format!("{}{}", ins.name(), opts.name_suffix))
-                            .with_aggregation(aggregation.clone())
-                            .build()
-                            .expect("Aggregation was validated above"),
-                    )
-                } else {
-                    None
-                }
-            })
+        if opts.name_suffix.is_empty() {
+            bail!("exponential histogram name_suffix must not be empty");
         }
-    };
-    Ok(mpb.with_resource(default_resource(global_tags)))
-}
-
-fn explicit_bucket_views(
-    mut mpb: MeterProviderBuilder,
-    use_seconds: bool,
-    bucket_overrides: HistogramBucketOverrides,
-) -> MeterProviderBuilder {
+        let aggregation = Aggregation::Base2ExponentialHistogram {
+            max_size: opts.max_size,
+            max_scale: opts.max_scale,
+            record_min_max: true,
+        };
+        // The view closure can only panic on a bad aggregation, so validate it once here.
+        metrics::Stream::builder()
+            .with_aggregation(aggregation.clone())
+            .build()
+            .map_err(|e| anyhow!("invalid exponential histogram options: {e}"))?;
+        let mpb = mpb.with_view(move |ins: &Instrument| {
+            if ins.kind() == InstrumentKind::Histogram {
+                Some(
+                    metrics::Stream::builder()
+                        .with_name(format!("{}{}", ins.name(), opts.name_suffix))
+                        .with_aggregation(aggregation.clone())
+                        .build()
+                        .expect("Aggregation was validated above"),
+                )
+            } else {
+                None
+            }
+        });
+        return Ok(mpb.with_resource(default_resource(global_tags)));
+    }
     for (name, buckets) in bucket_overrides.overrides {
         mpb = mpb.with_view(move |ins: &Instrument| {
             if ins.name().contains(&name) {
@@ -125,7 +113,7 @@ fn explicit_bucket_views(
             }
         });
     }
-    let mpb = mpb
+    let mut mpb = mpb
         .with_view(histo_view(WORKFLOW_E2E_LATENCY_HISTOGRAM_NAME, use_seconds))
         .with_view(histo_view(
             WORKFLOW_TASK_EXECUTION_LATENCY_HISTOGRAM_NAME,
@@ -148,7 +136,7 @@ fn explicit_bucket_views(
             use_seconds,
         ));
     // Fallback default
-    mpb.with_view(move |ins: &Instrument| {
+    mpb = mpb.with_view(move |ins: &Instrument| {
         if ins.kind() == InstrumentKind::Histogram {
             Some(
                 metrics::Stream::builder()
@@ -166,7 +154,8 @@ fn explicit_bucket_views(
         } else {
             None
         }
-    })
+    });
+    Ok(mpb.with_resource(default_resource(global_tags)))
 }
 
 /// Create an OTel meter that can be used as a [CoreMeter] to export metrics over OTLP.
@@ -621,8 +610,11 @@ pub(crate) mod tests {
 
     #[test]
     pub(crate) fn exponential_histograms_export_under_suffixed_name_only() {
+        let opts = Base2ExponentialHistogramOptions::builder()
+            .name_suffix("_exp")
+            .build();
         let (provider, exporter) = provider_with(
-            HistogramAggregation::Base2Exponential(Default::default()),
+            HistogramAggregation::Base2Exponential(opts),
             Default::default(),
         )
         .unwrap();
@@ -643,11 +635,11 @@ pub(crate) mod tests {
             vec![
                 ("temporal_test_count".to_string(), "sum"),
                 (
-                    "temporal_test_latency_native".to_string(),
+                    "temporal_test_latency_exp".to_string(),
                     "exponential_histogram"
                 ),
                 (
-                    "temporal_test_seconds_native".to_string(),
+                    "temporal_test_seconds_exp".to_string(),
                     "exponential_histogram"
                 ),
             ]

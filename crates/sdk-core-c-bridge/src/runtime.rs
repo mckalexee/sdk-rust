@@ -187,11 +187,12 @@ pub struct OpenTelemetryOptions {
     /// Histogram bucket overrides in form of
     /// `<metric1>\n<float>,<float>,<float>\n<metric2>\n<float>,<float>,<float>`
     pub histogram_bucket_overrides: NewlineDelimitedMapRef,
+    /// The zero value selects explicit buckets, which is the default.
     pub histogram_aggregation: OpenTelemetryHistogramAggregation,
     /// Only used with `Base2Exponential`. 0 means the default of 160.
     pub exponential_histogram_max_size: u32,
-    /// Only used with `Base2Exponential` and when `exponential_histogram_max_scale_set` is true,
-    /// otherwise the default of 20 applies.
+    /// Only used with `Base2Exponential` when `exponential_histogram_max_scale_set` is true.
+    /// Otherwise, the default of 20 applies.
     pub exponential_histogram_max_scale: i8,
     pub exponential_histogram_max_scale_set: bool,
     /// Only used with `Base2Exponential`. Empty means the default of `_native`.
@@ -204,7 +205,6 @@ pub enum OpenTelemetryMetricTemporality {
     Delta,
 }
 
-/// Zero-valued default so callers that zero-fill the options keep explicit buckets.
 #[repr(C)]
 pub enum OpenTelemetryHistogramAggregation {
     ExplicitBuckets = 0,
@@ -521,7 +521,6 @@ fn create_meter(
                         HistogramAggregation::ExplicitBuckets
                     }
                     OpenTelemetryHistogramAggregation::Base2Exponential => {
-                        let suffix = otel_options.exponential_histogram_name_suffix.to_str();
                         HistogramAggregation::Base2Exponential(
                             Base2ExponentialHistogramOptions::builder()
                                 .maybe_max_size(
@@ -533,7 +532,11 @@ fn create_meter(
                                         .exponential_histogram_max_scale_set
                                         .then_some(otel_options.exponential_histogram_max_scale),
                                 )
-                                .maybe_name_suffix((!suffix.is_empty()).then_some(suffix))
+                                .maybe_name_suffix(
+                                    otel_options
+                                        .exponential_histogram_name_suffix
+                                        .to_option_str(),
+                                )
                                 .build(),
                         )
                     }

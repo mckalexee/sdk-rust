@@ -55,12 +55,11 @@ relevant information.
 
 ### Added
 * The OTLP metrics exporter can export histograms as OpenTelemetry exponential histograms, which
-  Prometheus-compatible backends store as native histograms. The option applies to every histogram,
-  including custom ones, and exports each under its metric name plus a suffix, `_native` by default,
-  so the exponential series never shares a name with the fixed-bucket series it replaces. The
-  default, explicit buckets, is unchanged. The C bridge's `OpenTelemetryOptions` gains the
-  `histogram_aggregation`, `exponential_histogram_max_size`, `exponential_histogram_max_scale`,
-  `exponential_histogram_max_scale_set`, and `exponential_histogram_name_suffix` fields.
+  Prometheus-compatible backends store as native histograms, when an SDK enables the option,
+  including through the C bridge. It applies to every histogram, including custom ones, and names
+  each series with a suffix, `_native` by default, so it never shares a name with the fixed-bucket
+  series it replaces. It cannot be combined with histogram bucket overrides. Explicit buckets
+  remain the default.
 
 ## [0.10.0] - 2026-10-06
 

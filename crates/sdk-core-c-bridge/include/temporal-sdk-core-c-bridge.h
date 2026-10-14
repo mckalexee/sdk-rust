@@ -58,9 +58,6 @@ typedef enum TemporalCoreOpenTelemetryProtocol {
   TemporalCoreOpenTelemetryProtocol_Http,
 } TemporalCoreOpenTelemetryProtocol;
 
-/**
- * Zero-valued default so callers that zero-fill the options keep explicit buckets.
- */
 typedef enum TemporalCoreOpenTelemetryHistogramAggregation {
   TemporalCoreOpenTelemetryHistogramAggregation_ExplicitBuckets = 0,
   TemporalCoreOpenTelemetryHistogramAggregation_Base2Exponential,
@@ -424,14 +421,17 @@ typedef struct TemporalCoreOpenTelemetryOptions {
    * `<metric1>\n<float>,<float>,<float>\n<metric2>\n<float>,<float>,<float>`
    */
   TemporalCoreNewlineDelimitedMapRef histogram_bucket_overrides;
+  /**
+   * The zero value selects explicit buckets, which is the default.
+   */
   enum TemporalCoreOpenTelemetryHistogramAggregation histogram_aggregation;
   /**
    * Only used with `Base2Exponential`. 0 means the default of 160.
    */
   uint32_t exponential_histogram_max_size;
   /**
-   * Only used with `Base2Exponential` and when `exponential_histogram_max_scale_set` is true,
-   * otherwise the default of 20 applies.
+   * Only used with `Base2Exponential` when `exponential_histogram_max_scale_set` is true.
+   * Otherwise, the default of 20 applies.
    */
   int8_t exponential_histogram_max_scale;
   bool exponential_histogram_max_scale_set;

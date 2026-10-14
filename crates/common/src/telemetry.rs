@@ -148,7 +148,7 @@ pub struct OtelCollectorOptions {
     #[builder(default)]
     pub use_seconds_for_durations: bool,
     /// Overrides for histogram buckets. Units depend on the value of `use_seconds_for_durations`.
-    /// Only applies with [`HistogramAggregation::ExplicitBuckets`].
+    /// Must be empty unless `histogram_aggregation` is [`HistogramAggregation::ExplicitBuckets`].
     #[builder(default)]
     pub histogram_bucket_overrides: HistogramBucketOverrides,
     /// Protocol to use for communication with the collector
@@ -185,7 +185,7 @@ pub struct Base2ExponentialHistogramOptions {
     pub max_scale: i8,
     /// Appended to the name of every histogram, so the exponential series never shares a name
     /// with the fixed-bucket series it replaces. Defaults to `_native`. Must not be empty.
-    #[builder(into, default = String::from("_native"))]
+    #[builder(into, default = "_native".to_string())]
     pub name_suffix: String,
 }
 
