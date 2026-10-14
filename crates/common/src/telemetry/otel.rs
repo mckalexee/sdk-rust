@@ -450,14 +450,14 @@ pub(crate) mod tests {
     use opentelemetry_sdk::{
         error::{OTelSdkError, OTelSdkResult},
         metrics::{
-            Temporality,
+            InMemoryMetricExporter, Temporality,
             data::{AggregatedMetrics, MetricData, ResourceMetrics},
             exporter::PushMetricExporter,
         },
     };
     use std::{
         sync::{
-            Arc, Mutex,
+            Arc,
             atomic::{AtomicBool, Ordering},
         },
         time::Duration,
@@ -524,19 +524,6 @@ pub(crate) mod tests {
         }
     }
 
-    #[derive(Clone, Default)]
-    struct CapturingExporter {
-        exported: Arc<Mutex<Vec<(String, &'static str)>>>,
-    }
-
-    impl CapturingExporter {
-        fn exported(&self) -> Vec<(String, &'static str)> {
-            let mut exported = self.exported.lock().unwrap().clone();
-            exported.sort();
-            exported
-        }
-    }
-
     fn metric_kind<T>(data: &MetricData<T>) -> &'static str {
         match data {
             MetricData::Gauge(_) => "gauge",
@@ -546,38 +533,31 @@ pub(crate) mod tests {
         }
     }
 
-    impl PushMetricExporter for CapturingExporter {
-        async fn export(&self, metrics: &ResourceMetrics) -> OTelSdkResult {
-            let mut exported = self.exported.lock().unwrap();
-            for metric in metrics.scope_metrics().flat_map(|s| s.metrics()) {
+    fn exported(exporter: &InMemoryMetricExporter) -> Vec<(String, &'static str)> {
+        let mut exported: Vec<_> = exporter
+            .get_finished_metrics()
+            .unwrap()
+            .iter()
+            .flat_map(|rm| rm.scope_metrics())
+            .flat_map(|sm| sm.metrics())
+            .map(|metric| {
                 let kind = match metric.data() {
                     AggregatedMetrics::F64(d) => metric_kind(d),
                     AggregatedMetrics::U64(d) => metric_kind(d),
                     AggregatedMetrics::I64(d) => metric_kind(d),
                 };
-                exported.push((metric.name().to_string(), kind));
-            }
-            Ok(())
-        }
-
-        fn force_flush(&self) -> OTelSdkResult {
-            Ok(())
-        }
-
-        fn shutdown_with_timeout(&self, _timeout: Duration) -> OTelSdkResult {
-            Ok(())
-        }
-
-        fn temporality(&self) -> Temporality {
-            Temporality::Cumulative
-        }
+                (metric.name().to_string(), kind)
+            })
+            .collect();
+        exported.sort();
+        exported
     }
 
     fn provider_with(
         aggregation: HistogramAggregation,
         overrides: HistogramBucketOverrides,
-    ) -> Result<(SdkMeterProvider, CapturingExporter), anyhow::Error> {
-        let exporter = CapturingExporter::default();
+    ) -> Result<(SdkMeterProvider, InMemoryMetricExporter), anyhow::Error> {
+        let exporter = InMemoryMetricExporter::default();
         let reader = PeriodicReader::builder(exporter.clone())
             .with_interval(Duration::from_secs(60))
             .build();
@@ -603,16 +583,17 @@ pub(crate) mod tests {
         provider.force_flush().unwrap();
 
         assert_eq!(
-            exporter.exported(),
+            exported(&exporter),
             vec![("temporal_test_latency".to_string(), "histogram")]
         );
     }
 
     #[test]
     pub(crate) fn exponential_histograms_export_under_suffixed_name_only() {
-        let opts = Base2ExponentialHistogramOptions::builder()
-            .name_suffix("_exp")
-            .build();
+        let opts = Base2ExponentialHistogramOptions {
+            name_suffix: "_exp".to_string(),
+            ..Default::default()
+        };
         let (provider, exporter) = provider_with(
             HistogramAggregation::Base2Exponential(opts),
             Default::default(),
@@ -631,7 +612,7 @@ pub(crate) mod tests {
         provider.force_flush().unwrap();
 
         assert_eq!(
-            exporter.exported(),
+            exported(&exporter),
             vec![
                 ("temporal_test_count".to_string(), "sum"),
                 (
@@ -659,9 +640,10 @@ pub(crate) mod tests {
             .is_err()
         );
 
-        let empty_suffix = Base2ExponentialHistogramOptions::builder()
-            .name_suffix("")
-            .build();
+        let empty_suffix = Base2ExponentialHistogramOptions {
+            name_suffix: String::new(),
+            ..Default::default()
+        };
         assert!(
             provider_with(
                 HistogramAggregation::Base2Exponential(empty_suffix),
@@ -670,9 +652,10 @@ pub(crate) mod tests {
             .is_err()
         );
 
-        let bad_scale = Base2ExponentialHistogramOptions::builder()
-            .max_scale(21)
-            .build();
+        let bad_scale = Base2ExponentialHistogramOptions {
+            max_scale: 21,
+            ..Default::default()
+        };
         assert!(
             provider_with(
                 HistogramAggregation::Base2Exponential(bad_scale),

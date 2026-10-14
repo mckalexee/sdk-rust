@@ -521,24 +521,24 @@ fn create_meter(
                         HistogramAggregation::ExplicitBuckets
                     }
                     OpenTelemetryHistogramAggregation::Base2Exponential => {
-                        HistogramAggregation::Base2Exponential(
-                            Base2ExponentialHistogramOptions::builder()
-                                .maybe_max_size(
-                                    (otel_options.exponential_histogram_max_size > 0)
-                                        .then_some(otel_options.exponential_histogram_max_size),
-                                )
-                                .maybe_max_scale(
-                                    otel_options
-                                        .exponential_histogram_max_scale_set
-                                        .then_some(otel_options.exponential_histogram_max_scale),
-                                )
-                                .maybe_name_suffix(
-                                    otel_options
-                                        .exponential_histogram_name_suffix
-                                        .to_option_str(),
-                                )
-                                .build(),
-                        )
+                        let defaults = Base2ExponentialHistogramOptions::default();
+                        HistogramAggregation::Base2Exponential(Base2ExponentialHistogramOptions {
+                            max_size: if otel_options.exponential_histogram_max_size > 0 {
+                                otel_options.exponential_histogram_max_size
+                            } else {
+                                defaults.max_size
+                            },
+                            max_scale: if otel_options.exponential_histogram_max_scale_set {
+                                otel_options.exponential_histogram_max_scale
+                            } else {
+                                defaults.max_scale
+                            },
+                            name_suffix: otel_options
+                                .exponential_histogram_name_suffix
+                                .to_option_str()
+                                .map(str::to_string)
+                                .unwrap_or(defaults.name_suffix),
+                        })
                     }
                 })
                 .maybe_metric_periodicity(

@@ -173,25 +173,25 @@ pub enum HistogramAggregation {
 }
 
 /// Options for [`HistogramAggregation::Base2Exponential`].
-#[derive(Debug, Clone, bon::Builder)]
-#[non_exhaustive]
+#[derive(Debug, Clone)]
 pub struct Base2ExponentialHistogramOptions {
     /// Maximum number of buckets in each of the positive and negative ranges. Defaults to 160.
-    #[builder(default = 160)]
     pub max_size: u32,
     /// Maximum resolution scale, from -10 to 20. Defaults to 20. Prometheus reduces any scale
     /// above 8 on ingest.
-    #[builder(default = 20)]
     pub max_scale: i8,
     /// Appended to the name of every histogram, so the exponential series never shares a name
     /// with the fixed-bucket series it replaces. Defaults to `_native`. Must not be empty.
-    #[builder(into, default = "_native".to_string())]
     pub name_suffix: String,
 }
 
 impl Default for Base2ExponentialHistogramOptions {
     fn default() -> Self {
-        Base2ExponentialHistogramOptions::builder().build()
+        Self {
+            max_size: 160,
+            max_scale: 20,
+            name_suffix: "_native".to_string(),
+        }
     }
 }
 
