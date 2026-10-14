@@ -163,7 +163,7 @@ pub struct OtelCollectorOptions {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub enum HistogramAggregation {
-    /// Fixed bucket boundaries: Core's defaults per metric, or `histogram_bucket_overrides`.
+    /// Fixed bucket boundaries. Uses Core's defaults per metric, or `histogram_bucket_overrides` if specified.
     #[default]
     ExplicitBuckets,
     /// OpenTelemetry base-2 exponential histograms, which Prometheus-compatible backends store as
