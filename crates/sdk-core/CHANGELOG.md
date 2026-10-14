@@ -53,6 +53,15 @@ relevant information.
   ("Trying to send a new WFT for a run which already has one!"), which then timed out on the server
   and could leave the workflow stuck on a nondeterminism error.
 
+### Added
+* The OTLP metrics exporter can export histograms as OpenTelemetry exponential histograms, which
+  Prometheus-compatible backends store as native histograms. The option applies to every histogram,
+  including custom ones, and exports each under its metric name plus a suffix, `_native` by default,
+  so the exponential series never shares a name with the fixed-bucket series it replaces. The
+  default, explicit buckets, is unchanged. The C bridge's `OpenTelemetryOptions` gains the
+  `histogram_aggregation`, `exponential_histogram_max_size`, `exponential_histogram_max_scale`,
+  `exponential_histogram_max_scale_set`, and `exponential_histogram_name_suffix` fields.
+
 ## [0.10.0] - 2026-10-06
 
 ### Added
